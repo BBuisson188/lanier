@@ -3,6 +3,7 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const ZONE = 'America/New_York';
 const API = 'https://api.waterdata.usgs.gov/ogcapi/v1/collections/';
+const PREFERENCES_KEY = 'lake-lanier.chart-preferences';
 const RANGE_OPTIONS = {
   today: { days: 1, intervals: ['hourly'] },
   '7d': { days: 7, intervals: ['hourly', 'daily'] },
@@ -123,6 +124,27 @@ function updateIntervals() {
   const choices = ['auto', ...RANGE_OPTIONS[range.value].intervals];
   interval.replaceChildren(...choices.map(choice => new Option(choice[0].toUpperCase() + choice.slice(1), choice)));
   interval.value = choices.includes(preferredInterval) ? preferredInterval : 'auto';
+}
+
+function restoreChartPreferences() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(PREFERENCES_KEY));
+    if (saved && Object.hasOwn(RANGE_OPTIONS, saved.range)) {
+      range.value = saved.range;
+      preferredInterval = saved.interval;
+    }
+  } catch {
+    // The chart remains usable when browser storage is unavailable.
+  }
+  updateIntervals();
+}
+
+function saveChartPreferences() {
+  try {
+    window.localStorage.setItem(PREFERENCES_KEY, JSON.stringify({ range: range.value, interval: interval.value }));
+  } catch {
+    // The current selection still works for this visit.
+  }
 }
 
 function bucketStart(time, step) {
@@ -358,8 +380,16 @@ function inspectPointer(event) {
   highlight(closest);
 }
 
-range.addEventListener('change', () => { updateIntervals(); loadHistory(); });
-interval.addEventListener('change', () => { preferredInterval = interval.value; loadHistory(); });
+range.addEventListener('change', () => {
+  updateIntervals();
+  saveChartPreferences();
+  loadHistory();
+});
+interval.addEventListener('change', () => {
+  preferredInterval = interval.value;
+  saveChartPreferences();
+  loadHistory();
+});
 get('retry-reading').addEventListener('click', loadReading);
 get('retry-history').addEventListener('click', loadHistory);
 canvas.addEventListener('pointerdown', inspectPointer);
@@ -376,11 +406,12 @@ new ResizeObserver(drawChart).observe(get('plot'));
 window.addEventListener('pageshow', event => {
   if (event.persisted) {
     cache.clear();
+    restoreChartPreferences();
     loadReading();
     loadHistory();
   }
 });
 
-updateIntervals();
+restoreChartPreferences();
 loadReading();
 loadHistory();
